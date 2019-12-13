@@ -102,6 +102,7 @@ impl Context {
         let mut peer = self.peers.get_mut(&network_token).unwrap();
         peer.connect_handle = Some(connect_handle);
         peer.send(Message::Ping("hello".to_string()));
+        println!("after sent Ping");
         Ok(())
     }
 
@@ -124,14 +125,14 @@ impl Context {
         let mut events = Events::with_capacity(EVENT_CAP);
         let mut buf = [0; MSG_BUF_SIZE];
         loop {
-            self.poll.poll(&mut events, None).unwrap(); 
+            self.poll.poll(&mut events, None).expect("unable to poll events"); 
             for event in &events {
                 match event.token() {
                     LISTENER => {
                         loop {
                             match listener.accept() { 
                                 Ok((socket, socket_addr)) => {
-                                    self.register_peer(socket).unwrap();
+                                    self.register_peer(socket).expect("cannot register peer");
                                     //println!("tcp registered {}", socket_addr);
                                 },
                                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -195,18 +196,29 @@ impl Context {
                         match token_type {
                             NETWORK_TOKEN => { 
                                 loop {
-                                    let mut peer = self.peers.get_mut(&token).unwrap(); 
+                                    let mut peer = self.peers.get_mut(&token).expect("get peer fail"); 
                                     let read = peer.stream.read(&mut buf);
                                     match read {
                                         Ok(0) => {
-                                            break;
+                                            if !peer.is_connected {
+                                                match peer.connect_handle {
+                                                    Some(ref handler) => {
+                                                        handler.result_sender.send(ConnectResult::Fail).expect("sent connect fail");
+                                                        println!("Ok(0) ConnectResult::Fail");
+                                                        break;
+                                                    },
+                                                    _ => (),
+                                                }
+                                            } else {
+                                                break; 
+                                            }
                                         }
                                         Ok(len) => {
                                             if !peer.is_connected {
                                                 match peer.connect_handle {
                                                     Some(ref handler) => {
-                                                        handler.result_sender.send(ConnectResult::Success).unwrap();
                                                         peer.is_connected = true;
+                                                        handler.result_sender.send(ConnectResult::Success).expect("Ok(len) ConnectResult::Success");
                                                     },
                                                     _ => (),
                                                 }
@@ -227,17 +239,22 @@ impl Context {
                                             //self.peers.remove(&token).unwrap();   
                                             println!("Connect fail. could not connect to {:?}", peer.addr);
                                             match peer.connect_handle {
-                                                Some(ref handler) => handler.result_sender.send(ConnectResult::Fail).unwrap(),
-                                                _ => (),
+                                                Some(ref handler) => {
+                                                    println!("before handler send");
+                                                    handler.result_sender.send(ConnectResult::Fail).expect("result sender fail");
+                                                    println!("after handler send");
+                                                }
+                                                _ => {
+                                                    println!("cannot find handler");
+                                                },
                                             }
-                                            
                                         },
                                     }
                                 }
                             },
                             LOCAL_TOKEN => {
                                 let peer_token = Token(token.0 - 1);
-                                let peer = self.peers.get(&peer_token).unwrap(); 
+                                let peer = self.peers.get(&peer_token).expect("cannot get peer with local token"); 
                                 //println!("before reregister write");
                                 self.poll.reregister(
                                         &peer.stream,
@@ -250,7 +267,8 @@ impl Context {
                         }
                     },
                     token if event.readiness().is_writable() => {
-                        let peer = self.peers.get_mut(&token).unwrap(); 
+                        //println!("event is writable");
+                        let peer = self.peers.get_mut(&token).expect("writable cannot get peer"); 
                         let peer_token = Token(token.0 + 1);
                         let receiver = self.response_receiver.get(&peer_token).expect("response_receiver empty");
                         loop {
@@ -262,7 +280,11 @@ impl Context {
                                     //println!("write message of size {}, {:?}", encoded_msg.len(), encoded_msg);
                                     //let decoded_msg: Message = bincode::deserialize(&encoded_msg).expect("unable to encode msg");
                                     //println!("{:?}", decoded_msg);
-                                    peer_stream.write_all(encoded_msg.as_slice()).unwrap();
+                                    match peer_stream.write_all(encoded_msg.as_slice()) {
+                                        Ok(()) => (), //println!("write ok"),
+                                        _ => println!("unable to write stream"),
+                                    };
+
                                     self.poll.reregister(
                                         peer_stream,
                                         token,

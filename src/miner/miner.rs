@@ -1,9 +1,12 @@
+extern crate rand;
 use super::block::{Block, Transaction};
 use super::hash::{H256};
 use super::message::ApiMessage as ServerApiMessage;
-use std::thread;
+use std::{thread, time};
 use mio_extras::channel::{self};
 use std::sync::mpsc::{self, TryRecvError};
+use rand::Rng;
+
 
 pub struct Manager {
     control_receiver: mpsc::Receiver<ManagerMessage>,
@@ -106,7 +109,7 @@ impl MinerContext {
             block: None, 
             control_sender: control_sender,
             message_receiver: message_receiver,
-            threshold: 128,
+            threshold: 250,
         };
         (miner_context, message_sender)
     }
@@ -129,7 +132,7 @@ impl MinerContext {
                             //mine block
                             self.block = Some(block); 
                             self.has_block = true;
-                            println!("start mining");
+                            
                         },
                     } 
                 },
@@ -147,9 +150,12 @@ impl MinerContext {
                     Some(block) => {
                         let mut block = block;
                         let new_hash = block.update_nonce(H256::new());
+                        let num = rand::thread_rng().gen_range(0, 50);
+                        let sleep_time = time::Duration::from_millis(num);
+                        thread::sleep(sleep_time);
                         
                         if new_hash.0[0] > self.threshold {
-                            println!("mined a block");
+                            println!("Mined block");
                             self.control_sender.send(ManagerMessage::Success(block.clone()));
                             self.has_block = false;
                         }

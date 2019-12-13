@@ -36,7 +36,6 @@ impl Mempool {
                 self.mining_tx.insert(tx.hash); 
             }
             let blockchain = self.blockchain.lock().unwrap();
-
             // update merkle root TODO
             let header = Header {
                 hash: H256::default(),
@@ -46,12 +45,15 @@ impl Mempool {
                 prev_hash: blockchain.latest_hash,
             };
             drop(blockchain);
+            self.block.header = header;
 
             self.block.update_root();
+
+            self.block.update_hash();
+
             
             let miner_message = ManagerMessage::Data(self.block.clone());
             self.miner_sender.send(miner_message);
-            println!("Mempool. Sent mining command");
             
             self.block.clear();
         }

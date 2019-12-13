@@ -43,6 +43,7 @@ impl TransactionGenerator {
             hash: H256::default(), 
         };
         transaction.update_hash();
+        
         transaction
     }
 }

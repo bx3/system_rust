@@ -56,9 +56,8 @@ impl Performer {
                     println!("receive Pong {}", info_msg);                  
                 },
                 Message::NewBlock(block) => {
-                    println!("NEW BLOCK");
-                    println!("{:?}", block);
-                    println!("receive block hash {:?}", block.header.hash);
+                    //println!("prev hash {:?} -> {:?}", block.header.prev_hash , block.header.hash);
+
                     // check nonce pass TODO
                     //
                     //
@@ -66,10 +65,12 @@ impl Performer {
                     let mut block_db = self.block_db.lock().unwrap();
                     block_db.insert(&block);
 
-                    let mut chain = self.chain.lock().unwrap();
-                    chain.insert(block.header.hash);
 
-                    println!("blockchain height {}", chain.get_height());
+                    let mut chain = self.chain.lock().unwrap();
+
+                    chain.insert(&block.header);
+
+                    println!("blockchain height {}, latest hash {:?}", chain.get_height(), chain.latest_hash);
                 },
                 Message::NewTransaction(transaction) => {
                     // check if transactin is valid TODO
@@ -78,7 +79,6 @@ impl Performer {
                     
                     let mut mempool = self.mempool.lock().unwrap();
                     mempool.insert(transaction);
-                    println!("Done. Performer NewTransaction");
                 },
             }
         } 
